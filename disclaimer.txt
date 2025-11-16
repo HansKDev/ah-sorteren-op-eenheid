@@ -1,0 +1,26 @@
+DISCLAIMER / VRIJWARING
+
+Nederlands
+----------
+Dit is een onofficiële browserextensie voor ah.nl en ah.be. Dit project is onafhankelijk en op geen enkele manier gelieerd aan, gesponsord door of goedgekeurd door Albert Heijn, Ahold Delhaize of aanverwante ondernemingen.
+
+Alle informatie in deze repository (inclusief broncode, documentatie en voorbeeldteksten) wordt aangeboden "zoals deze is" zonder enige vorm van garantie, expliciet of impliciet. Gebruik van deze software en informatie is volledig op eigen risico.
+
+De auteurs en bijdragers aan dit project aanvaarden geen enkele aansprakelijkheid voor directe of indirecte schade, gevolgschade, gederfde winst, gemiste besparingen of enige andere schade die voortvloeit uit of verband houdt met het gebruik van deze software of de bijbehorende documentatie.
+
+De functionaliteit van de extensie is afhankelijk van de weergave en werking van ah.nl en ah.be. Als Albert Heijn de website(s) aanpast, kunnen functionaliteit en sortering onjuist, onvolledig of niet meer beschikbaar zijn. Controleer altijd prijzen en productinformatie op de officiële website(s) voordat je een aankoop doet.
+
+Niets in deze repository vormt juridisch advies. Raadpleeg voor juridisch advies altijd een bevoegde jurist.
+
+English
+-------
+This is an unofficial browser extension for ah.nl and ah.be. This project is independent and is not affiliated with, sponsored by, or endorsed by Albert Heijn, Ahold Delhaize, or any related entities.
+
+All information in this repository (including source code, documentation, and example texts) is provided "as is", without any kind of warranty, express or implied. Use of this software and information is entirely at your own risk.
+
+The authors and contributors to this project accept no liability for any direct or indirect damages, consequential damages, loss of profit, loss of savings, or any other damages arising from or related to the use of this software or the accompanying documentation.
+
+The functionality of the extension depends on how ah.nl and ah.be are displayed and operate. If Albert Heijn changes the website(s), functionality and sorting may become incorrect, incomplete, or unavailable. Always verify prices and product information on the official website(s) before making a purchase.
+
+Nothing in this repository constitutes legal advice. For legal advice, always consult a qualified lawyer.
+

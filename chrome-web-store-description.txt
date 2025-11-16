@@ -1,0 +1,35 @@
+Eenheidsprijs-sorter voor ah.nl en ah.be (onofficieel)
+
+**Nederlands – korte beschrijving**
+Voeg extra sorteermogelijkheden toe op ah.nl en ah.be en sorteer producten op basis van eenheidsprijs (bijv. €/kg of €/L), direct in je browser.
+
+**Nederlands – volledige beschrijving**
+Deze onofficiële extensie voegt extra sorteermogelijkheden toe aan ah.nl en ah.be, zodat je producten kunt sorteren op eenheidsprijs (bijvoorbeeld prijs per kilo, liter, stuk, wasbeurt of meter). De sortering gebeurt volledig in je eigen browser, op basis van de eenheidsprijzen die Albert Heijn zelf toont.
+
+- Sorteer producten op eenheidsprijs (€/kg, €/L, €/stuk, etc.)
+- Werkt op product-, categorie- en zoekresultatenpagina’s van ah.nl en ah.be
+- De pagina wordt alleen **lokaal** aangepast; er worden geen gegevens naar externe servers gestuurd
+- Geen tracking, geen advertenties, geen affiliate-links
+
+**Belangrijke opmerkingen**
+- Deze extensie is een onafhankelijk project en is **niet gelieerd aan, gesponsord door of goedgekeurd door Albert Heijn of Ahold Delhaize**.
+- De sortering is gebaseerd op de getoonde eenheidsprijzen op ah.nl en ah.be. Als de websites worden aangepast of prijzen veranderen, kan de sortering onjuist of onvolledig zijn. Controleer altijd de prijs op ah.nl of ah.be zelf vóórdat je een aankoop afrondt.
+- De extensie verzamelt, bewaart of verkoopt **geen** persoonlijke gegevens.
+
+---
+
+**English – short description**
+Add extra sorting options on ah.nl and ah.be and sort products by unit price (e.g. €/kg or €/L), directly in your browser.
+
+**English – full description**
+This unofficial extension adds extra sorting options to ah.nl and ah.be so you can sort products by unit price (for example price per kilogram, litre, piece, wash, or meter). Sorting happens entirely in your own browser, based on the unit prices that Albert Heijn displays on the sites.
+
+- Sort products by unit price (€/kg, €/L, €/piece, etc.)
+- Works on product, category, and search result pages on ah.nl and ah.be
+- The page is modified **locally only**; no data is sent to external servers
+- No tracking, no ads, no affiliate links
+
+**Important notes**
+- This extension is an independent project and is **not affiliated with, sponsored by, or endorsed by Albert Heijn or Ahold Delhaize**.
+- Sorting is based on the unit prices shown on ah.nl and ah.be. If the websites change or prices change, sorting may be incorrect or incomplete. Always double-check the price on ah.nl or ah.be before completing a purchase.
+- The extension does **not** collect, store, or sell any personal data.
