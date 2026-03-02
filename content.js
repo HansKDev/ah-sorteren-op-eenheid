@@ -85,19 +85,21 @@
 
     const allOptions = document.querySelectorAll("button[role='option']");
     let baseOption = null;
+    let baseOptionWrapper = null;
     for (const opt of allOptions) {
       if (!(opt instanceof HTMLElement)) continue;
       const text = (opt.textContent || "").trim();
       if (/^Relevantie$/i.test(text) || /^Prijs laag\s*-\s*hoog$/i.test(text)) {
         baseOption = opt;
+        baseOptionWrapper = opt.closest("li") || opt;
         break;
       }
     }
-    if (!baseOption) return;
+    if (!baseOption || !baseOptionWrapper) return;
 
     const listbox =
-      baseOption.closest("[role='listbox']") ||
-      baseOption.parentElement;
+      baseOptionWrapper.closest("[role='listbox']") ||
+      baseOptionWrapper.parentElement;
     if (!listbox || !(listbox instanceof HTMLElement)) return;
 
     const pageUnits =
@@ -114,24 +116,33 @@
 
     function createOption(unit, direction) {
       const label = getSortLabel(unit, direction);
-      const option = baseOption.cloneNode(true);
-      option.id = "ah-ext-option-sorting-unit-price-" + unit + "-" + direction;
-      option.setAttribute(DROPDOWN_OPTION_ATTR, "true");
-      option.setAttribute("aria-selected", "false");
+      
+      const wrapperOption = baseOptionWrapper.cloneNode(true);
+      let optionNode = wrapperOption;
+      if (wrapperOption !== baseOption) {
+        optionNode = wrapperOption.querySelector("button[role='option']");
+      }
+      if (!optionNode) return null;
 
-      const textEl = option.querySelector("p");
+      optionNode.id = "ah-ext-option-sorting-unit-price-" + unit + "-" + direction;
+      optionNode.setAttribute(DROPDOWN_OPTION_ATTR, "true");
+      optionNode.setAttribute("aria-selected", "false");
+
+      optionNode.classList.remove("option-button_selected__h4oHT");
+
+      const textEl = optionNode.querySelector("p");
       if (textEl) {
         textEl.textContent = label;
       } else {
-        option.textContent = label;
+        optionNode.textContent = label;
       }
 
-      const checkmark = option.querySelector("[data-checkmark]");
+      const checkmark = optionNode.querySelector("[data-checkmark]");
       if (checkmark && checkmark instanceof HTMLElement) {
         checkmark.style.visibility = "hidden";
       }
 
-      option.addEventListener(
+      optionNode.addEventListener(
         "click",
         (ev) => {
           ev.preventDefault();
@@ -148,33 +159,56 @@
 
           const buttons = listbox.querySelectorAll("button[role='option']");
           buttons.forEach((btn) => {
-            const isSelected = btn === option;
+            const isSelected = btn === optionNode;
             btn.setAttribute("aria-selected", isSelected ? "true" : "false");
+            
+            if (isSelected) {
+              btn.classList.add("option-button_selected__h4oHT");
+            } else {
+              btn.classList.remove("option-button_selected__h4oHT");
+            }
+            
             const mark = btn.querySelector("[data-checkmark]");
             if (mark && mark instanceof HTMLElement) {
               mark.style.visibility = isSelected ? "visible" : "hidden";
             }
           });
 
-          const root =
-            baseOption.closest("[data-testhook*='sorting']") ||
-            baseOption.closest("[data-testid*='sorting']") ||
-            baseOption.closest("[class*='select-input_root']") ||
-            listbox.closest("[class*='select-input_root']");
+          let trigger = null;
+          if (listbox.id) {
+            trigger = document.querySelector(`button[aria-controls='${listbox.id}']`);
+          }
+          if (!trigger) {
+            const root =
+              baseOptionWrapper.closest("[class*='popover_root']") ||
+              baseOptionWrapper.closest("[data-testhook*='sorting']") ||
+              baseOptionWrapper.closest("[data-testid*='sorting']") ||
+              baseOptionWrapper.closest("[class*='select-input_root']") ||
+              listbox.closest("[class*='select-input_root']");
 
-          if (root && root instanceof HTMLElement) {
-            const trigger =
-              root.querySelector("button[aria-haspopup='listbox']") ||
-              root.querySelector("button");
-            if (trigger) {
-              trigger.click();
+            if (root && root instanceof HTMLElement) {
+              trigger =
+                root.querySelector("button[aria-haspopup='listbox']") ||
+                root.querySelector("button");
             }
+          }
 
-            const placeholder = root.querySelector(
-              ".select-input-button_placeholder__ba4cT"
-            );
-            if (placeholder && placeholder instanceof HTMLElement) {
-              placeholder.textContent = label;
+          if (trigger) {
+            trigger.click();
+
+            const valueSpan = 
+              trigger.querySelector("[class*='select-input-button_value']") || 
+              trigger.querySelector("[class*='placeholder']");
+              
+            if (valueSpan) {
+              valueSpan.textContent = label;
+            } else {
+              const span = trigger.querySelector("span");
+              if (span) {
+                span.textContent = label;
+              } else {
+                trigger.textContent = label;
+              }
             }
           }
 
@@ -191,7 +225,7 @@
         true
       );
 
-      return option;
+      return wrapperOption;
     }
 
     for (const unit of pageUnits) {
