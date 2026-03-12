@@ -4,7 +4,7 @@ Chrome/Chromium content-script extension that enhances product/search pages on [
 
 - showing unit prices (€/kg, €/L, €/stuk, €/meter, €/wasbeurt) directly inside every product tile, including multi‑buy promotions such as `3 VOOR 14.99` or `1+1 GRATIS`;
 - injecting sorting options (laag‑hoog / hoog‑laag) for every relevant unit inside the native “Sorteer op” dropdown;
-- falling back to the old floating “Sort by €/kg” button only when the native dropdown is not available.
+It automatically finds all product cards, calculates the correct per-unit price (even handling complex multibuys and various packaging descriptions), visually adds this calculated price as a small bubble to each product card, and integrates new sorting options directly into the native AH.nl "Sorteer op" dropdown menu.
 
 The logic lives in a single content script (`content.js`) and is documented further in `ah-site-notes.md`.
 

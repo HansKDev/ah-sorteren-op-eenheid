@@ -9,3 +9,10 @@ Thumbs.db
 # Node / tooling (not used now, but safe defaults)
 node_modules/
 dist/
+
+# Local debug / scratch files
+.mcp.json
+get_*.py
+inspect_*.js
+PLAN.md
+suggestions.md

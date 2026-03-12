@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-12
+
+### Fixed
+- Fixed all DOM selectors broken by AH.nl site redesign: product cards, prices, unit sizes and promotion labels all use new `data-testid` values on search result pages
+- Added support for both old and new AH.nl DOM structures (category pages vs search pages use different selectors)
+- Fixed price parsing for new aria-label format ("voor X euro en Y cent" instead of "€X.XX")
+- Fixed product grid container detection for sorting: cards are now nested in wrapper divs, requiring DOM tree walking to find the real grid container
+
 ## [1.1.0] - 2026-03-02
 
 ### Fixed

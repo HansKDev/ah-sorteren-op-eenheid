@@ -1,6 +1,8 @@
 # Notes on AH.nl Frontend Structure (for this extension)
 
-This file captures what we learned about how AH.nl structures its product pages, so future changes to the extension are easier.
+This file captures what we learned about how AH.nl structures its product pages, so future changes to the extension are easier. The core component uses a centralized extraction structure parameterized by a table (`UNIT_CONFIG`), collapsing previous distinct mapping handlers (`extractPriceAndWeight`, `extractPriceAndVolume`, etc.) into a cohesive data-driven routine per node parsing.
+
+Mutation loops triggered by layout restructures (loading products on scroll) are hooked via a `MutationObserver`. It includes bounds to silently discard isolated injections triggered solely by adding `.ah-ext-unit-price` product container stamps, preventing infinite performance feedback loops.
 
 ## Product cards
 
@@ -53,8 +55,8 @@ This file captures what we learned about how AH.nl structures its product pages,
     - Multi-pack: `(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(kg|g)`.
     - Single: `(\d+[.,]?\d*)\s*(kg|g)`.
   - **Volume → liters** (`parseVolumeToLiters`):
-    - Multi-pack: `(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(ml|cl|l|liter)`.
-    - Single: `(\d+[.,]?\d*)\s*(ml|cl|l|liter)`.
+    - Multi-pack: `(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(ml|cl|dl|l|liter)`.
+    - Single: `(\d+[.,]?\d*)\s*(ml|cl|dl|l|liter)`.
   - **Pieces** (`parsePiecesCount`):
     - Multi-pack: `(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(st|stuk|stuks|st\.)`.
     - Single: `(\d+[.,]?\d*)\s*(st|stuk|stuks|st\.)`.
@@ -77,6 +79,9 @@ These are then used to compute:
 
 Some promotions affect the true cost per unit but are not reflected directly in the base price; instead AH shows a shield-like label:
 
+- Complex wording combinations handled:
+  - `"2e halve prijs"` (Calculates total cost as 75% base price)
+  - `"A+B GRATIS"` (e.g. 1+1 gratis -> 50% base price)
 - Markup example:
   - `<span class="shield_text__…">3 VOOR 14.99</span>`
   - `<span class="shield_text__…">1+1 GRATIS</span>`
@@ -85,13 +90,13 @@ Some promotions affect the true cost per unit but are not reflected directly in 
 
 Two promo styles are supported:
 
-1. **N VOOR X**:
-   - Regex: `(\d+)\s*voor\s*([0-9][0-9.,]*)` (case-insensitive).
-   - Effective per-item price = `bundlePrice / qty`.
-2. **A+B GRATIS**:
-   - Regex: `(\d+)\s*\+\s*(\d+)\s*gratis`.
-   - Assume “pay for A, get B free”:
-     - Effective per-item price = `(basePrice * A) / (A + B)`.
+1.  **N VOOR X**:
+    - Regex: `(\d+)\s*voor\s*([0-9][0-9.,]*)` (case-insensitive).
+    - Effective per-item price = `bundlePrice / qty`.
+2.  **A+B GRATIS**:
+    - Regex: `(\d+)\s*\+\s*(\d+)\s*gratis`.
+    - Assume “pay for A, get B free”:
+      - Effective per-item price = `(basePrice * A) / (A + B)`.
 
 The lowest valid effective per-item price from those shields is stored as `promoPriceEuro`. If present and lower than `priceEuro`, the extension:
 
@@ -132,11 +137,16 @@ The code avoids excessive DOM thrashing by:
 
 - The sort control is a custom select built roughly as:
   - A trigger button (with `aria-haspopup="listbox"`) showing current label.
-  - A listbox containing `button[role="option"]` elements for:
+  - A listbox containing `[role="option"]` elements for:
     - `Relevantie`
     - `Prijs laag - hoog`
     - `Prijs hoog - laag`
     - `Nutri-Score A - E`
+- The Sorteer op dropdown is actually a `ul` wrapped listbox element `[role="listbox"]`. Children vary between versions.
+
+Recent changes dictate options are identified generically by `[role='option']` and may be `<button className="link-button...">` or raw list elements containing text nodes nested in paragraph/span elements. When extending the list, the selected option `aria-selected` is verified dynamically over the node's `classList` to preserve native styling bounds, as previous hardcoded AH CSS hashes were observed as excessively fragile mappings.
+
+To inject successfully without breaking SVG structures (such as checkmarks inside trailing wrapper elements), manipulation queries must target the child text specifically (e.g., `<p>` or native text nodes) rather than overriding outer `element.textContent`.
 - The extension:
   - Finds a base option by matching an existing option whose text is `Relevantie` or `Prijs laag - hoog`.
   - Clones that option to create new ones, with ids like:
@@ -163,17 +173,17 @@ Which units appear depends on what is detected on the page (see below).
 
 To avoid cluttering the dropdown with irrelevant options, the extension:
 
-1. Looks at up to ~80 `data-testid="product-unit-size"` elements on the current page.
-2. For each unit-size string, it marks units as “present” if:
-   - `kg` or `g` → weight (`kg`).
-   - `ml`, `cl`, `l`, `liter` → volume (`l`).
-   - `wasbeurt` substring → wash (`wash`).
-   - `st`, `stuk`, `stuks`, `st.` → piece (`piece`).
-   - `mm`, `cm`, `m`, `meter`, `meters` → length (`m`).
-3. Builds a list in the fixed order: `["kg", "l", "wash", "piece", "m"]`, filtered to only units found on the page.
-4. Uses that list to:
-   - Decide which sort options to add.
-   - Decide which units to attempt when generating labels per card (first successful unit for that card “wins”).
+1.  Looks at up to ~80 `data-testid="product-unit-size"` elements on the current page.
+2.  For each unit-size string, it marks units as “present” if:
+    - `kg` or `g` → weight (`kg`).
+    - Volume metrics: `l`, `liter`, `ml`, `cl`, `dl`. Example "24 x 0.25 l" -> calculates to 6 liters.
+    - `wasbeurt` substring → wash (`wash`).
+    - `st`, `stuk`, `stuks`, `st.` → piece (`piece`).
+    - `mm`, `cm`, `m`, `meter`, `meters` → length (`m`).
+3.  Builds a list in the fixed order: `["kg", "l", "wash", "piece", "m"]`, filtered to only units found on the page.
+4.  Uses that list to:
+    - Decide which sort options to add.
+    - Decide which units to attempt when generating labels per card (first successful unit for that card “wins”).
 
 Examples:
 
@@ -197,7 +207,6 @@ Examples:
 ## Things to watch out for
 
 - AH can rename CSS classes without changing `data-testid` attributes; logic should prefer `data-testid` and `aria-label` over specific class names where possible.
-- Some promotions (e.g. “2e halve prijs”) are not yet parsed; they would need additional logic in `applyMultiBuyPromotion`.
 - Always avoid tight mutation loops:
   - Do not rewrite label text if it hasn’t changed.
   - Throttle reactions to DOM changes.

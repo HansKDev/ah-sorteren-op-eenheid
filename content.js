@@ -1,16 +1,8 @@
 (() => {
   "use strict";
 
-  const BUTTON_ID = "ah-price-per-kg-sort-button";
   const DROPDOWN_OPTION_ATTR = "data-ah-ext-unit-price-option";
   const UNIT_ORDER = ["kg", "l", "wash", "piece", "m"];
-  const UNIT_LABELS = {
-    kg: "kg",
-    l: "L",
-    wash: "wasbeurt",
-    piece: "st",
-    m: "m"
-  };
   const UNIT_NAMES = {
     kg: "Prijs per kg",
     l: "Prijs per liter",
@@ -20,7 +12,13 @@
   };
   const UNIT_DETECTION_LIMIT = 80;
   const LOG_PREFIX = "[ah-unit-sorter]";
-  let lastSortAscending = true;
+
+  // AH uses different DOM structures on category pages vs search pages.
+  // Support both old and new data-testid variants.
+  const SEL_CARD = "[data-testid='product-card-vertical-container'], [data-testid='product-card']";
+  const SEL_PRICE = "[data-testid='product-card-current-price'], [data-testid='price-amount']";
+  const SEL_UNIT_SIZE = "[data-testid='product-card-price-description'], [data-testid='product-unit-size']";
+  const SEL_PROMO = "[data-testid='product-card-promotion-label'], [data-testid='product-shield']";
 
   function parseLocaleNumber(raw) {
     if (typeof raw !== "string") return null;
@@ -37,56 +35,24 @@
     return Number.isFinite(value) ? value : null;
   }
 
-  function createSortButton() {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    const btn = document.createElement("button");
-    btn.id = BUTTON_ID;
-    btn.textContent = "Sort by \u20ac/kg";
-    Object.assign(btn.style, {
-      position: "fixed",
-      top: "80px",
-      right: "20px",
-      zIndex: "2147483647",
-      padding: "8px 12px",
-      background: "#00a0e2",
-      color: "#fff",
-      border: "none",
-      borderRadius: "4px",
-      fontSize: "13px",
-      fontFamily: "inherit",
-      cursor: "pointer",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-    });
-
-    btn.addEventListener("mouseenter", () => {
-      btn.style.background = "#0087bf";
-    });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.background = "#00a0e2";
-    });
-
-    btn.addEventListener("click", () => {
-      const asc = lastSortAscending;
-      const changed = sortProductsByPricePerKg(asc);
-      if (changed) {
-        lastSortAscending = !lastSortAscending;
-        btn.textContent = asc ? "Sort by \u20ac/kg (desc)" : "Sort by \u20ac/kg (asc)";
-      }
-    });
-
-    document.body.appendChild(btn);
-  }
-
   function attachSortDropdownOptions(unitsForPage) {
     if (document.querySelector("[" + DROPDOWN_OPTION_ATTR + "]")) {
       return;
     }
 
-    const allOptions = document.querySelectorAll("button[role='option']");
+    const allOptions = document.querySelectorAll("[role='option']");
     let baseOption = null;
     let baseOptionWrapper = null;
+    let selectedClass = null;
     for (const opt of allOptions) {
+      if (opt.getAttribute("aria-selected") === "true" && opt.classList) {
+        for (const cls of opt.classList) {
+          if (/selected/i.test(cls)) {
+            selectedClass = cls;
+            break;
+          }
+        }
+      }
       if (!(opt instanceof HTMLElement)) continue;
       const text = (opt.textContent || "").trim();
       if (/^Relevantie$/i.test(text) || /^Prijs laag\s*-\s*hoog$/i.test(text)) {
@@ -120,7 +86,7 @@
       const wrapperOption = baseOptionWrapper.cloneNode(true);
       let optionNode = wrapperOption;
       if (wrapperOption !== baseOption) {
-        optionNode = wrapperOption.querySelector("button[role='option']");
+        optionNode = wrapperOption.querySelector("[role='option']");
       }
       if (!optionNode) return null;
 
@@ -128,13 +94,27 @@
       optionNode.setAttribute(DROPDOWN_OPTION_ATTR, "true");
       optionNode.setAttribute("aria-selected", "false");
 
-      optionNode.classList.remove("option-button_selected__h4oHT");
+      if (selectedClass) {
+        optionNode.classList.remove(selectedClass);
+      }
 
-      const textEl = optionNode.querySelector("p");
+      const textEl = optionNode.querySelector("p, span");
       if (textEl) {
         textEl.textContent = label;
       } else {
-        optionNode.textContent = label;
+        // Fallback: If no known text container is found, try to only replace text nodes to avoid destroying SVGs
+        let foundTextNode = false;
+        for (const child of optionNode.childNodes) {
+          if (child.nodeType === Node.TEXT_NODE && child.textContent.trim().length > 0) {
+            child.textContent = label;
+            foundTextNode = true;
+            break;
+          }
+        }
+        if (!foundTextNode) {
+          // Absolute fallback, might destroy SVGs if they exist
+          optionNode.textContent = label;
+        }
       }
 
       const checkmark = optionNode.querySelector("[data-checkmark]");
@@ -149,23 +129,17 @@
           ev.stopPropagation();
 
           const ascending = direction === "asc";
-          if (unit === "l") {
-            sortProductsByPricePerLitre(ascending);
-          } else if (unit === "kg") {
-            sortProductsByPricePerKg(ascending);
-          } else {
-            sortProductsByUnit(unit, ascending);
-          }
+          sortProductsByUnit(unit, ascending);
 
-          const buttons = listbox.querySelectorAll("button[role='option']");
+          const buttons = listbox.querySelectorAll("[role='option']");
           buttons.forEach((btn) => {
             const isSelected = btn === optionNode;
             btn.setAttribute("aria-selected", isSelected ? "true" : "false");
             
             if (isSelected) {
-              btn.classList.add("option-button_selected__h4oHT");
+              if (selectedClass) btn.classList.add(selectedClass);
             } else {
-              btn.classList.remove("option-button_selected__h4oHT");
+              if (selectedClass) btn.classList.remove(selectedClass);
             }
             
             const mark = btn.querySelector("[data-checkmark]");
@@ -255,11 +229,16 @@
     if (!el) return null;
 
     const withAriaLabel =
-      el.hasAttribute("aria-label") ? el : el.querySelector("[aria-label*='€']");
+      el.hasAttribute("aria-label") ? el : el.querySelector("[aria-label*='€']") || el.querySelector("[aria-label*='euro']");
     if (withAriaLabel) {
       const label = withAriaLabel.getAttribute("aria-label") || "";
       const fromAria = parseEuroPrice(label);
       if (fromAria != null) return fromAria;
+      // Parse "voor X euro en Y cent" or "van X euro en Y cent" format
+      const euroCentMatch = label.match(/(\d+)\s*euro\s*en\s*(\d+)\s*cent/);
+      if (euroCentMatch) {
+        return parseInt(euroCentMatch[1]) + parseInt(euroCentMatch[2]) / 100;
+      }
     }
 
     const anyAria = el.querySelector("[aria-label]");
@@ -267,6 +246,10 @@
       const label = anyAria.getAttribute("aria-label") || "";
       const fromAria = parseEuroPrice(label);
       if (fromAria != null) return fromAria;
+      const euroCentMatch = label.match(/(\d+)\s*euro\s*en\s*(\d+)\s*cent/);
+      if (euroCentMatch) {
+        return parseInt(euroCentMatch[1]) + parseInt(euroCentMatch[2]) / 100;
+      }
     }
 
     const text = (el.textContent || "").replace(/\s+/g, " ").trim();
@@ -327,7 +310,7 @@
     const t = text.replace(/\s+/g, " ").toLowerCase();
 
     // Pattern like "6 x 33 cl" or "24 x 0,25 l"
-    let m = t.match(/(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(ml|cl|l|liter)\b/);
+    let m = t.match(/(\d+)\s*[x×]\s*(\d+[.,]?\d*)\s*(ml|dl|cl|l|liter)\b/);
     if (m) {
       const count = parseLocaleNumber(m[1]);
       const amount = parseLocaleNumber(m[2]);
@@ -338,6 +321,8 @@
         totalL = (count * amount) / 1000;
       } else if (unit === "cl") {
         totalL = (count * amount) / 100;
+      } else if (unit === "dl") {
+        totalL = (count * amount) / 10;
       } else {
         // l or liter
         totalL = count * amount;
@@ -346,7 +331,7 @@
     }
 
     // Simple pattern like "330 ml" or "0,75 l"
-    m = t.match(/(\d+[.,]?\d*)\s*(ml|cl|l|liter)\b/);
+    m = t.match(/(\d+[.,]?\d*)\s*(ml|dl|cl|l|liter)\b/);
     if (m) {
       const amount = parseLocaleNumber(m[1]);
       if (!Number.isFinite(amount)) return null;
@@ -356,6 +341,9 @@
       }
       if (unit === "cl") {
         return amount / 100;
+      }
+      if (unit === "dl") {
+        return amount / 10;
       }
       // l or liter
       if (unit === "l" || unit === "liter") {
@@ -455,13 +443,13 @@
   function applyMultiBuyPromotion(card, basePrice) {
     if (!Number.isFinite(basePrice)) return null;
 
-    const shieldEls = card.querySelectorAll("[class*='shield_text']");
+    const shieldEls = card.querySelectorAll(SEL_PROMO);
     if (!shieldEls.length) return null;
 
     let best = null;
 
     for (const el of shieldEls) {
-      const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
+      const raw = (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim();
       if (!raw) continue;
       const text = raw.toLowerCase();
 
@@ -498,81 +486,51 @@
           best = best == null ? perItem : Math.min(best, perItem);
         }
       }
+
+      // Pattern like "2e halve prijs"
+      m = text.match(/2e?\s*halve\s*prijs/i);
+      if (m) {
+        // Buy 2, second at half price -> pay 1.5x for 2 items
+        const perItem = (basePrice * 1.5) / 2;
+        if (Number.isFinite(perItem)) {
+          best = best == null ? perItem : Math.min(best, perItem);
+        }
+      }
     }
 
     return best;
   }
 
   function findBestPriceInCard(card) {
-    const priceNodes = card.querySelectorAll("[data-testid='price-amount']");
-    if (!priceNodes.length) return null;
+    const currentPriceEl = card.querySelector(SEL_PRICE);
+    if (!currentPriceEl) return null;
 
-    let best = null;
+    const price = parsePriceFromPriceAmountElement(currentPriceEl);
+    if (price == null) return null;
 
-    for (const el of priceNodes) {
-      if (!(el instanceof HTMLElement)) continue;
-
-      const price = parsePriceFromPriceAmountElement(el);
-      if (price == null) continue;
-
-      let priority = 1;
-      const className = (el.className || "").toLowerCase();
-
-      const ariaSource = el.hasAttribute("aria-label")
-        ? el
-        : el.querySelector("[aria-label]");
-      const ariaLabel = ariaSource
-        ? (ariaSource.getAttribute("aria-label") || "")
-        : "";
-      const ariaLower = ariaLabel.toLowerCase();
-
-      if (/\bwas\b/.test(className) || /oude prijs/.test(ariaLower)) {
-        priority = 2;
-      }
-      if (/bonus/.test(className) || /highlight/.test(className)) {
-        priority = 0;
-      }
-
-      if (
-        !best ||
-        priority < best.priority ||
-        (priority === best.priority && price < best.priceEuro)
-      ) {
-        best = { priceEuro: price, priceEl: el, priority };
-      }
-    }
-
-    if (!best) return null;
-
-    const promoPerItem = applyMultiBuyPromotion(card, best.priceEuro);
+    const promoPerItem = applyMultiBuyPromotion(card, price);
 
     return {
-      priceEuro: best.priceEuro,
+      priceEuro: price,
       promoPriceEuro:
-        promoPerItem != null && promoPerItem < best.priceEuro ? promoPerItem : null,
-      priceEl: best.priceEl
+        promoPerItem != null && promoPerItem < price ? promoPerItem : null,
+      priceEl: currentPriceEl
     };
   }
 
-  function findUnitPriceElement(root) {
-    const candidates = root.querySelectorAll("span, div, p");
-    for (const el of candidates) {
-      const text = el.textContent || "";
-      if (text.includes("/kg") && (text.includes("\u20ac") || /[0-9]/.test(text))) {
-        const value = parseEuroPerKg(text);
-        if (value != null) {
-          return { element: el, value };
-        }
-      }
-    }
-    return null;
-  }
+  const UNIT_CONFIG = {
+    kg:    { parseFn: parseWeightToKg,     fallbackRegex: /kg|g/i,            label: "kg" },
+    l:     { parseFn: parseVolumeToLiters,  fallbackRegex: /ml|dl|cl|l|liter/i, label: "L" },
+    wash:  { parseFn: parseWashesCount,     fallbackRegex: /wasbeurt/i,        label: "wasbeurt" },
+    piece: { parseFn: parsePiecesCount,     fallbackRegex: /st|stuk/i,         label: "st" },
+    m:     { parseFn: parseLengthToMeters,  fallbackRegex: /(mm|cm|m|meter)/i, label: "m" }
+  };
 
-  function extractPriceAndVolume(card) {
+  function extractPriceAndQuantity(card, parseFn, fallbackRegex) {
     let priceEuro = null;
     let promoPriceEuro = null;
     let priceEl = null;
-    let volumeL = null;
+    let quantity = null;
 
     const priceInfo = findBestPriceInCard(card);
     if (priceInfo) {
@@ -581,20 +539,17 @@
       priceEl = priceInfo.priceEl;
     }
 
-    const ahSizeEl = card.querySelector("[data-testid='product-unit-size']");
+    const ahSizeEl = card.querySelector(SEL_UNIT_SIZE);
     if (ahSizeEl) {
-      const v = parseVolumeToLiters(ahSizeEl.textContent || "");
-      if (v != null) {
-        volumeL = v;
-      }
+      const q = parseFn(ahSizeEl.textContent || "");
+      if (q != null) quantity = q;
     }
 
-    if (priceEuro != null && volumeL != null && volumeL > 0) {
-      return { priceEuro, promoPriceEuro, priceEl, volumeL };
+    if (priceEuro != null && quantity != null && quantity > 0) {
+      return { priceEuro, promoPriceEuro, priceEl, quantity };
     }
 
     const nodes = card.querySelectorAll("span, div, p");
-
     for (const el of nodes) {
       const text = el.textContent || "";
       if (priceEuro == null) {
@@ -604,209 +559,15 @@
           priceEl = el;
         }
       }
-      if (!volumeL && /ml|cl|l|liter/i.test(text)) {
-        const v = parseVolumeToLiters(text);
-        if (v != null) {
-          volumeL = v;
-        }
+      if (!quantity && fallbackRegex.test(text)) {
+        const q = parseFn(text);
+        if (q != null) quantity = q;
       }
-      if (priceEuro != null && volumeL != null) break;
+      if (priceEuro != null && quantity != null) break;
     }
 
-    if (priceEuro == null || volumeL == null || volumeL <= 0) return null;
-    return { priceEuro, promoPriceEuro, priceEl, volumeL };
-  }
-
-  function extractPriceAndPieces(card) {
-    let priceEuro = null;
-    let promoPriceEuro = null;
-    let priceEl = null;
-    let pieces = null;
-
-    const priceInfo = findBestPriceInCard(card);
-    if (priceInfo) {
-      priceEuro = priceInfo.priceEuro;
-      promoPriceEuro = priceInfo.promoPriceEuro || null;
-      priceEl = priceInfo.priceEl;
-    }
-
-    const ahSizeEl = card.querySelector("[data-testid='product-unit-size']");
-    if (ahSizeEl) {
-      const c = parsePiecesCount(ahSizeEl.textContent || "");
-      if (c != null) {
-        pieces = c;
-      }
-    }
-
-    if (priceEuro != null && pieces != null && pieces > 0) {
-      return { priceEuro, promoPriceEuro, priceEl, pieces };
-    }
-
-    const nodes = card.querySelectorAll("span, div, p");
-
-    for (const el of nodes) {
-      const text = el.textContent || "";
-      if (priceEuro == null) {
-        const p = parseEuroPrice(text);
-        if (p != null) {
-          priceEuro = p;
-          priceEl = el;
-        }
-      }
-      if (!pieces && /st|stuk/i.test(text)) {
-        const c = parsePiecesCount(text);
-        if (c != null) {
-          pieces = c;
-        }
-      }
-      if (priceEuro != null && pieces != null) break;
-    }
-
-    if (priceEuro == null || pieces == null || pieces <= 0) return null;
-    return { priceEuro, promoPriceEuro, priceEl, pieces };
-  }
-
-  function extractPriceAndLength(card) {
-    let priceEuro = null;
-    let promoPriceEuro = null;
-    let priceEl = null;
-    let meters = null;
-
-    const priceInfo = findBestPriceInCard(card);
-    if (priceInfo) {
-      priceEuro = priceInfo.priceEuro;
-      promoPriceEuro = priceInfo.promoPriceEuro || null;
-      priceEl = priceInfo.priceEl;
-    }
-
-    const ahSizeEl = card.querySelector("[data-testid='product-unit-size']");
-    if (ahSizeEl) {
-      const m = parseLengthToMeters(ahSizeEl.textContent || "");
-      if (m != null) {
-        meters = m;
-      }
-    }
-
-    if (priceEuro != null && meters != null && meters > 0) {
-      return { priceEuro, promoPriceEuro, priceEl, meters };
-    }
-
-    const nodes = card.querySelectorAll("span, div, p");
-
-    for (const el of nodes) {
-      const text = el.textContent || "";
-      if (priceEuro == null) {
-        const p = parseEuroPrice(text);
-        if (p != null) {
-          priceEuro = p;
-          priceEl = el;
-        }
-      }
-      if (!meters && /(mm|cm|m|meter)/i.test(text)) {
-        const mVal = parseLengthToMeters(text);
-        if (mVal != null) {
-          meters = mVal;
-        }
-      }
-      if (priceEuro != null && meters != null) break;
-    }
-
-    if (priceEuro == null || meters == null || meters <= 0) return null;
-    return { priceEuro, promoPriceEuro, priceEl, meters };
-  }
-
-  function extractPriceAndWashes(card) {
-    let priceEuro = null;
-    let promoPriceEuro = null;
-    let priceEl = null;
-    let washes = null;
-
-    const priceInfo = findBestPriceInCard(card);
-    if (priceInfo) {
-      priceEuro = priceInfo.priceEuro;
-      promoPriceEuro = priceInfo.promoPriceEuro || null;
-      priceEl = priceInfo.priceEl;
-    }
-
-    const ahSizeEl = card.querySelector("[data-testid='product-unit-size']");
-    if (ahSizeEl) {
-      const w = parseWashesCount(ahSizeEl.textContent || "");
-      if (w != null) {
-        washes = w;
-      }
-    }
-
-    const nodes = card.querySelectorAll("span, div, p");
-
-    for (const el of nodes) {
-      const text = el.textContent || "";
-      if (priceEuro == null) {
-        const p = parseEuroPrice(text);
-        if (p != null) {
-          priceEuro = p;
-          priceEl = el;
-        }
-      }
-      if (!washes && /wasbeurt/i.test(text)) {
-        const w = parseWashesCount(text);
-        if (w != null) {
-          washes = w;
-        }
-      }
-      if (priceEuro != null && washes != null) break;
-    }
-
-    if (priceEuro == null || washes == null || washes <= 0) return null;
-    return { priceEuro, promoPriceEuro, priceEl, washes };
-  }
-
-  function extractPriceAndWeight(card) {
-    let priceEuro = null;
-    let promoPriceEuro = null;
-    let priceEl = null;
-    let weightKg = null;
-
-    const priceInfo = findBestPriceInCard(card);
-    if (priceInfo) {
-      priceEuro = priceInfo.priceEuro;
-      promoPriceEuro = priceInfo.promoPriceEuro || null;
-      priceEl = priceInfo.priceEl;
-    }
-
-    const ahWeightEl = card.querySelector("[data-testid='product-unit-size']");
-    if (ahWeightEl) {
-      const w = parseWeightToKg(ahWeightEl.textContent || "");
-      if (w != null) {
-        weightKg = w;
-      }
-    }
-
-    if (priceEuro != null && weightKg != null && weightKg > 0) {
-      return { priceEuro, promoPriceEuro, priceEl, weightKg };
-    }
-
-    const nodes = card.querySelectorAll("span, div, p");
-
-    for (const el of nodes) {
-      const text = el.textContent || "";
-      if (priceEuro == null) {
-        const p = parseEuroPrice(text);
-        if (p != null) {
-          priceEuro = p;
-          priceEl = el;
-        }
-      }
-      if (!weightKg && /kg|g/i.test(text)) {
-        const w = parseWeightToKg(text);
-        if (w != null) {
-          weightKg = w;
-        }
-      }
-      if (priceEuro != null && weightKg != null) break;
-    }
-
-    if (priceEuro == null || weightKg == null || weightKg <= 0) return null;
-    return { priceEuro, promoPriceEuro, priceEl, weightKg };
+    if (priceEuro == null || quantity == null || quantity <= 0) return null;
+    return { priceEuro, promoPriceEuro, priceEl, quantity };
   }
 
   function injectUnitPriceLabel(card, unitPrice, priceEl, unitLabel, promoUnitPrice) {
@@ -856,128 +617,56 @@
     }
   }
 
+  function findUnitPriceElement(root) {
+    const candidates = root.querySelectorAll("span, div, p");
+    for (const el of candidates) {
+      const text = el.textContent || "";
+      if (text.includes("/kg") && (text.includes("\u20ac") || /[0-9]/.test(text))) {
+        const value = parseEuroPerKg(text);
+        if (value != null) {
+          return { element: el, value };
+        }
+      }
+    }
+    return null;
+  }
+
   function getUnitPriceForCard(card, unit) {
     const mode = unit || "kg";
 
     if (mode === "kg") {
-      // 1) Prefer an already visible €/kg label (from site or another extension)
       const direct = findUnitPriceElement(card);
       if (direct && direct.value != null) {
         return direct.value;
       }
-
-      // 2) Derive €/kg from price and weight info inside the card
-      const info = extractPriceAndWeight(card);
-      if (!info) return null;
-      const basePerKg = info.priceEuro / info.weightKg;
-      if (!Number.isFinite(basePerKg) || basePerKg <= 0) return null;
-
-      let promoPerKg = null;
-      if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
-        promoPerKg = info.promoPriceEuro / info.weightKg;
-      }
-
-      const sortPrice =
-        promoPerKg != null && promoPerKg > 0 && promoPerKg < basePerKg
-          ? promoPerKg
-          : basePerKg;
-
-      injectUnitPriceLabel(card, basePerKg, info.priceEl, "kg", promoPerKg);
-      return sortPrice;
     }
 
-    if (mode === "l") {
-      const info = extractPriceAndVolume(card);
-      if (!info) return null;
-      const basePerL = info.priceEuro / info.volumeL;
-      if (!Number.isFinite(basePerL) || basePerL <= 0) return null;
+    const config = UNIT_CONFIG[mode];
+    if (!config) return null;
 
-      let promoPerL = null;
-      if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
-        promoPerL = info.promoPriceEuro / info.volumeL;
-      }
+    const info = extractPriceAndQuantity(card, config.parseFn, config.fallbackRegex);
+    if (!info) return null;
 
-      const sortPrice =
-        promoPerL != null && promoPerL > 0 && promoPerL < basePerL
-          ? promoPerL
-          : basePerL;
+    const basePerUnit = info.priceEuro / info.quantity;
+    if (!Number.isFinite(basePerUnit) || basePerUnit <= 0) return null;
 
-      injectUnitPriceLabel(card, basePerL, info.priceEl, "L", promoPerL);
-      return sortPrice;
+    let promoPerUnit = null;
+    if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
+      promoPerUnit = info.promoPriceEuro / info.quantity;
     }
 
-    if (mode === "piece") {
-      const info = extractPriceAndPieces(card);
-      if (!info) return null;
-      const basePerPiece = info.priceEuro / info.pieces;
-      if (!Number.isFinite(basePerPiece) || basePerPiece <= 0) return null;
+    const sortPrice =
+      promoPerUnit != null && promoPerUnit > 0 && promoPerUnit < basePerUnit
+        ? promoPerUnit
+        : basePerUnit;
 
-      let promoPerPiece = null;
-      if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
-        promoPerPiece = info.promoPriceEuro / info.pieces;
-      }
-
-      const sortPrice =
-        promoPerPiece != null && promoPerPiece > 0 && promoPerPiece < basePerPiece
-          ? promoPerPiece
-          : basePerPiece;
-
-      injectUnitPriceLabel(card, basePerPiece, info.priceEl, "st", promoPerPiece);
-      return sortPrice;
-    }
-
-    if (mode === "m") {
-      const info = extractPriceAndLength(card);
-      if (!info) return null;
-      const basePerM = info.priceEuro / info.meters;
-      if (!Number.isFinite(basePerM) || basePerM <= 0) return null;
-
-      let promoPerM = null;
-      if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
-        promoPerM = info.promoPriceEuro / info.meters;
-      }
-
-      const sortPrice =
-        promoPerM != null && promoPerM > 0 && promoPerM < basePerM
-          ? promoPerM
-          : basePerM;
-
-      injectUnitPriceLabel(card, basePerM, info.priceEl, "m", promoPerM);
-      return sortPrice;
-    }
-
-    if (mode === "wash") {
-      const info = extractPriceAndWashes(card);
-      if (!info) return null;
-      const basePerWash = info.priceEuro / info.washes;
-      if (!Number.isFinite(basePerWash) || basePerWash <= 0) return null;
-
-      let promoPerWash = null;
-      if (info.promoPriceEuro != null && info.promoPriceEuro > 0) {
-        promoPerWash = info.promoPriceEuro / info.washes;
-      }
-
-      const sortPrice =
-        promoPerWash != null && promoPerWash > 0 && promoPerWash < basePerWash
-          ? promoPerWash
-          : basePerWash;
-
-      injectUnitPriceLabel(
-        card,
-        basePerWash,
-        info.priceEl,
-        "wasbeurt",
-        promoPerWash
-      );
-      return sortPrice;
-    }
-
-    return null;
+    injectUnitPriceLabel(card, basePerUnit, info.priceEl, config.label, promoPerUnit);
+    return sortPrice;
   }
 
   function detectUnitsOnPage() {
     const found = new Set();
-    const sizeEls = document.querySelectorAll("[data-testid='product-unit-size']");
+    const sizeEls = document.querySelectorAll(SEL_UNIT_SIZE);
 
     let checked = 0;
     for (const el of sizeEls) {
@@ -985,7 +674,7 @@
       if (/\b(kg|g)\b/.test(text)) {
         found.add("kg");
       }
-      if (/\b(ml|cl|l|liter)\b/.test(text)) {
+      if (/\b(ml|dl|cl|l|liter)\b/.test(text)) {
         found.add("l");
       }
       if (/\bwasbeurt/.test(text)) {
@@ -994,7 +683,7 @@
       if (/\b(st\.?|stuk|stuks)\b/.test(text)) {
         found.add("piece");
       }
-      if (/\b(mm|cm|m|meter|meters)\b/.test(text)) {
+      if (/\d\s*(mm|cm|meter|meters)\b/.test(text) || /\d\s+m\b/.test(text)) {
         found.add("m");
       }
 
@@ -1028,11 +717,14 @@
         : detectUnitsOnPage();
     if (!units.length) return;
 
-    const candidates = document.querySelectorAll(
-      "[data-testhook*='product'], [data-testhook*='Product'], [data-testid*='product'], article, li"
-    );
+    const candidates = document.querySelectorAll(SEL_CARD);
     for (const card of candidates) {
-      ensureUnitPriceLabel(card, units);
+      try {
+        if (!card.querySelector(SEL_PRICE)) continue;
+        ensureUnitPriceLabel(card, units);
+      } catch (e) {
+        console.warn(LOG_PREFIX, "Error labeling card:", e);
+      }
     }
   }
 
@@ -1040,39 +732,41 @@
     const cards = new Set();
     const results = [];
 
-    const candidates = document.querySelectorAll(
-      "[data-testhook*='product'], [data-testhook*='Product'], [data-testid*='product'], article, li"
-    );
+    const candidates = document.querySelectorAll(SEL_CARD);
 
     for (const card of candidates) {
-      if (!(card instanceof HTMLElement)) continue;
-      if (cards.has(card)) continue;
+      try {
+        if (!(card instanceof HTMLElement)) continue;
+        if (!card.querySelector(SEL_PRICE)) continue;
+        if (cards.has(card)) continue;
 
-      const pricePerUnit = getUnitPriceForCard(card, unit);
-      if (pricePerUnit == null) continue;
+        const pricePerUnit = getUnitPriceForCard(card, unit);
+        if (pricePerUnit == null) continue;
 
-      let container = card.parentElement;
-      if (!container) continue;
-
-      // Avoid reordering top-level layout sections like main/body/footer
-      const forbidden = new Set(["HTML", "BODY", "MAIN", "FOOTER", "HEADER"]);
-      if (forbidden.has(container.tagName)) {
-        if (container.parentElement && !forbidden.has(container.parentElement.tagName)) {
+        // Walk up from the card to find a container with multiple children (the product grid)
+        const forbidden = new Set(["HTML", "BODY", "MAIN", "FOOTER", "HEADER"]);
+        let container = card.parentElement;
+        while (container && (container.children.length < 2 || forbidden.has(container.tagName))) {
           container = container.parentElement;
-        } else {
-          continue;
         }
+        if (!container) continue;
+
+        // Find the wrapper: the ancestor of card that is a direct child of the grid container
+        let wrapper = card;
+        while (wrapper && wrapper.parentElement !== container) {
+          wrapper = wrapper.parentElement;
+        }
+        if (!wrapper || wrapper.parentElement !== container) continue;
+
+        cards.add(card);
+        results.push({
+          card: wrapper,
+          container,
+          pricePerUnit
+        });
+      } catch (e) {
+        console.warn(LOG_PREFIX, "Error processing card for sorting:", e);
       }
-
-      // Only consider containers that actually hold multiple product cards
-      if (!container.children || container.children.length < 2) continue;
-
-      cards.add(card);
-      results.push({
-        card,
-        container,
-        pricePerUnit
-      });
     }
 
     return results;
@@ -1118,33 +812,29 @@
     return true;
   }
 
-  function sortProductsByPricePerKg(ascending = true) {
-    return sortProductsByUnit("kg", ascending);
-  }
-
-  function sortProductsByPricePerLitre(ascending = true) {
-    return sortProductsByUnit("l", ascending);
-  }
-
   function init() {
-    const existingButton = document.getElementById(BUTTON_ID);
-    if (existingButton && existingButton.parentElement) {
-      existingButton.parentElement.removeChild(existingButton);
-    }
     const units = detectUnitsOnPage();
     attachSortDropdownOptions(units);
     labelUnitPricesForAllCards(units);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
-  }
+  init();
 
   let mutationScheduled = false;
-  const obs = new MutationObserver(() => {
+  const obs = new MutationObserver((mutations) => {
     if (mutationScheduled) return;
+
+    // Skip if every mutation is just our own injected labels
+    const isOnlyOurs = mutations.every((mut) => {
+      if (mut.type !== "childList") return false;
+      for (const node of mut.addedNodes) {
+        if (!(node instanceof HTMLElement)) return false;
+        if (!node.classList.contains("ah-ext-unit-price")) return false;
+      }
+      return mut.addedNodes.length > 0;
+    });
+    if (isOnlyOurs) return;
+
     mutationScheduled = true;
     setTimeout(() => {
       mutationScheduled = false;
