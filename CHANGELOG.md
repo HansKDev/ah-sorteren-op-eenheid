@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-03-30
+
+### Fixed
+- Fixed sorting having no effect: the grid container search now targets `product-results-products` directly instead of stopping at an intermediate wrapper div with too few children
+
 ## [1.2.0] - 2026-03-12
 
 ### Fixed
