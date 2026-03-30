@@ -743,11 +743,18 @@
         const pricePerUnit = getUnitPriceForCard(card, unit);
         if (pricePerUnit == null) continue;
 
-        // Walk up from the card to find a container with multiple children (the product grid)
+        // Walk up from the card to find the product grid container.
+        // Prefer a known AH grid testid, otherwise find the highest ancestor
+        // with enough children to actually contain multiple products.
         const forbidden = new Set(["HTML", "BODY", "MAIN", "FOOTER", "HEADER"]);
-        let container = card.parentElement;
-        while (container && (container.children.length < 2 || forbidden.has(container.tagName))) {
-          container = container.parentElement;
+        let container = card.closest("[data-testid='product-results-products']") ||
+                        card.closest("[data-testid='search-lane-grid']");
+        if (!container) {
+          // Fallback: walk up and keep going past small intermediate wrappers
+          container = card.parentElement;
+          while (container && (container.children.length < 4 || forbidden.has(container.tagName))) {
+            container = container.parentElement;
+          }
         }
         if (!container) continue;
 
